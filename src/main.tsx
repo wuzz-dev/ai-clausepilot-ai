@@ -2,21 +2,22 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
-  ArrowRight,
   BadgeCheck,
-  BarChart3,
   BookOpenCheck,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   FileSearch,
+  Gavel,
   Gauge,
+  History,
   KeyRound,
   Layers3,
   LockKeyhole,
+  Play,
   Route,
   Scale,
   ShieldCheck,
-  Sparkles,
   UploadCloud,
   WalletCards,
   Webhook
@@ -55,47 +56,74 @@ type ContractResult = {
   createdAt: string;
 };
 
-const sampleContract = `Master Services Agreement between Northstar Analytics and VendorCo.
+const contractSamples = [
+  {
+    label: "Vendor MSA",
+    name: "VendorCo MSA",
+    counterparty: "VendorCo",
+    dealValue: 120000,
+    text: `Master Services Agreement between Northstar Analytics and VendorCo.
 The customer shall indemnify and hold VendorCo harmless from all claims arising out of customer data.
 VendorCo's aggregate liability is unlimited for all claims and excludes consequential damages only at VendorCo's discretion.
 This agreement automatically renews unless either party gives 30 days notice before the renewal date.
 Payment is due Net 60 after receipt of invoice.
 The agreement is governed by the laws of Texas.
 VendorCo may process personal data but the parties have not attached a data processing agreement.
-Termination is permitted only for uncured material breach after 45 days notice.`;
-
-const pricing = [
-  { name: "Solo", price: "$149", volume: "50 reviews", best: false },
-  { name: "Team", price: "$399", volume: "250 reviews + playbooks", best: true },
-  { name: "Legal Ops", price: "$999", volume: "1,000 reviews + routing", best: false }
+Termination is permitted only for uncured material breach after 45 days notice.`
+  },
+  {
+    label: "Customer order form",
+    name: "Acme Analytics Order Form",
+    counterparty: "Acme Analytics",
+    dealValue: 42000,
+    text: `Order Form for hosted analytics services.
+Fees are payable Net 30. Either party may terminate for convenience on 30 days notice.
+The service provider's aggregate liability is limited to 12 months of fees paid under this order.
+Each party indemnifies the other for third-party claims caused by breach, negligence, or willful misconduct.
+Customer data is processed under the attached Data Processing Addendum.
+Governing law is Delaware. Renewal requires written agreement by both parties.`
+  },
+  {
+    label: "High-risk data deal",
+    name: "Healthcare Data Pilot",
+    counterparty: "WellPath Labs",
+    dealValue: 260000,
+    text: `Pilot Agreement for healthcare data enrichment.
+Customer grants Vendor access to regulated personal data. No data processing agreement is attached.
+Vendor may use subcontractors without notice. Vendor disclaims security warranties.
+Customer must indemnify Vendor for all claims, including Vendor negligence.
+Liability is uncapped for Customer and capped at one month of fees for Vendor.
+Payment terms are Net 75. Governing law is Nevada.
+The agreement auto-renews for one year unless notice is sent 15 days before renewal.`
+  }
 ];
 
-const routeLabels: Record<ContractResult["reviewStatus"], string> = {
+const pricing = [
+  { name: "Solo", price: "$149", volume: "50 reviews", note: "Founders and small sales teams" },
+  { name: "Team", price: "$399", volume: "250 reviews", note: "Shared playbooks and routing" },
+  { name: "Legal Ops", price: "$999", volume: "1,000 reviews", note: "Portfolio reporting and controls" }
+];
+
+const statusLabels: Record<ContractResult["reviewStatus"], string> = {
   approved: "Approved",
   business_approval: "Business approval",
   legal_review: "Legal review",
   needs_legal_review: "Legal priority"
 };
 
-function Stat({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Gauge }) {
-  return (
-    <div className="stat">
-      <Icon size={18} aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
+const defaultRoute = ["Contract owner", "Legal counsel", "Finance leadership"];
 
 function App() {
-  const [contractText, setContractText] = useState(sampleContract);
-  const [contractName, setContractName] = useState("VendorCo MSA");
-  const [counterparty, setCounterparty] = useState("VendorCo");
-  const [dealValue, setDealValue] = useState(120000);
+  const [selectedSample, setSelectedSample] = useState(0);
+  const [contractText, setContractText] = useState(contractSamples[0].text);
+  const [contractName, setContractName] = useState(contractSamples[0].name);
+  const [counterparty, setCounterparty] = useState(contractSamples[0].counterparty);
+  const [dealValue, setDealValue] = useState(contractSamples[0].dealValue);
   const [liabilityCapMaxMonths, setLiabilityCapMaxMonths] = useState(12);
   const [renewalNoticeDaysMin, setRenewalNoticeDaysMin] = useState(45);
   const [maxPaymentTermDays, setMaxPaymentTermDays] = useState(45);
   const [result, setResult] = useState<ContractResult | null>(null);
+  const [history, setHistory] = useState<ContractResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [monthlyContracts, setMonthlyContracts] = useState(85);
@@ -103,13 +131,23 @@ function App() {
   const [hourlyCost, setHourlyCost] = useState(135);
 
   const roi = useMemo(() => {
-    const hoursSaved = (monthlyContracts * minutesPerReview * 0.72) / 60;
+    const hoursSaved = Math.round((monthlyContracts * minutesPerReview * 0.64) / 60);
     const value = hoursSaved * hourlyCost;
-    const net = value - 399;
-    return { hoursSaved, value, net };
-  }, [monthlyContracts, minutesPerReview, hourlyCost]);
+    return { hoursSaved, value, net: value - 399 };
+  }, [hourlyCost, minutesPerReview, monthlyContracts]);
 
-  async function runReview() {
+  function chooseSample(index: number) {
+    const sample = contractSamples[index];
+    setSelectedSample(index);
+    setContractText(sample.text);
+    setContractName(sample.name);
+    setCounterparty(sample.counterparty);
+    setDealValue(sample.dealValue);
+    setError("");
+  }
+
+  async function runReview(event?: React.FormEvent) {
+    event?.preventDefault();
     setLoading(true);
     setError("");
     try {
@@ -137,7 +175,9 @@ function App() {
       if (!response.ok) {
         throw new Error(payload?.error || "Review failed");
       }
-      setResult(payload);
+      const nextResult = payload as ContractResult;
+      setResult(nextResult);
+      setHistory((current) => [nextResult, ...current].slice(0, 6));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Review failed");
     } finally {
@@ -145,138 +185,77 @@ function App() {
     }
   }
 
-  const activeResult = result;
-  const highRisk = activeResult?.clauseMap.filter((finding) => finding.risk === "high").length ?? 2;
-  const mediumRisk = activeResult?.clauseMap.filter((finding) => finding.risk === "medium").length ?? 3;
+  const active = result;
+  const findingPreview = active?.clauseMap ?? [];
+  const highCount = findingPreview.filter((finding) => finding.risk === "high").length;
+  const mediumCount = findingPreview.filter((finding) => finding.risk === "medium").length;
 
   return (
-    <main>
-      <section className="hero">
-        <nav className="nav" aria-label="Primary">
-          <div className="brand">
-            <Scale size={24} aria-hidden="true" />
-            <span>ClausePilot AI</span>
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <Scale size={22} aria-hidden="true" />
+          <div>
+            <strong>ClausePilot</strong>
+            <span>Contract review desk</span>
           </div>
-          <div className="nav-actions">
-            <a href="#dashboard">Dashboard</a>
-            <a href="#pricing">Pricing</a>
-            <button className="icon-button" aria-label="API keys">
-              <KeyRound size={18} />
-            </button>
-          </div>
+        </div>
+        <nav aria-label="Workspace">
+          {[
+            ["Intake", UploadCloud],
+            ["Risk", Gauge],
+            ["Routing", Route],
+            ["Playbook", BookOpenCheck]
+          ].map(([label, Icon]) => (
+            <a href={`#${String(label).toLowerCase()}`} key={String(label)}>
+              {React.createElement(Icon as typeof UploadCloud, { size: 17, "aria-hidden": true })}
+              {String(label)}
+            </a>
+          ))}
         </nav>
+        <div className="sidebar-note">
+          <ShieldCheck size={18} aria-hidden="true" />
+          <span>Review output is a triage aid. High-risk agreements stay human-in-the-loop.</span>
+        </div>
+      </aside>
 
-        <div className="hero-grid">
-          <div className="hero-copy">
-            <p className="eyebrow">Contract risk review and approval routing</p>
-            <h1>Turn messy contracts into a routed legal playbook in minutes.</h1>
-            <p className="lede">
-              ClausePilot extracts key clauses, checks them against your policy, creates negotiation asks,
-              and gives sales, procurement, and legal the same audit trail.
-            </p>
-            <div className="hero-actions">
-              <a className="primary" href="#dashboard">
-                Run review <ArrowRight size={18} />
-              </a>
-              <a className="secondary" href="#workflow">View workflow</a>
-            </div>
-            <div className="hero-stats">
-              <Stat label="Review time cut" value="72%" icon={Clock3} />
-              <Stat label="Gross margin target" value="82%" icon={WalletCards} />
-              <Stat label="Fallback mode" value="Demo safe" icon={ShieldCheck} />
-            </div>
+      <section className="workspace">
+        <header className="topbar">
+          <div>
+            <p>Legal operations</p>
+            <h1>Contract risk review and approval routing</h1>
           </div>
+          <button className="primary-action" onClick={() => void runReview()} disabled={loading}>
+            <Play size={17} aria-hidden="true" />
+            {loading ? "Reviewing" : "Run review"}
+          </button>
+        </header>
 
-          <div className="hero-visual" aria-label="Contract review workflow preview">
-            <div className="document-sheet">
-              <div className="sheet-top">
-                <span>VendorCo MSA</span>
-                <strong>Risk 78</strong>
+        <section className="metric-grid">
+          <Metric icon={<FileSearch size={19} />} label="Reviews this month" value="214" detail="42 routed to legal" />
+          <Metric icon={<AlertTriangle size={19} />} label="High-risk clauses" value={String(active ? highCount : 18)} detail="Privacy and liability lead" />
+          <Metric icon={<Clock3 size={19} />} label="Time returned" value="167h" detail="Estimated from review minutes" />
+          <Metric icon={<WalletCards size={19} />} label="Credit burn" value="$38.60" detail="Demo costs are zero" />
+        </section>
+
+        <section className="workbench" id="intake">
+          <form className="panel intake-panel" onSubmit={(event) => void runReview(event)}>
+            <div className="panel-header">
+              <div>
+                <p>Contract intake</p>
+                <h2>Review a real clause set against your playbook</h2>
               </div>
-              <div className="clause-line danger" />
-              <div className="clause-line medium" />
-              <div className="clause-line ok" />
-              <div className="finding-stack">
-                <span><AlertTriangle size={15} /> Liability uncapped</span>
-                <span><BookOpenCheck size={15} /> DPA missing</span>
-                <span><Route size={15} /> Legal + finance route</span>
-              </div>
+              <Gavel size={20} aria-hidden="true" />
             </div>
-            <div className="route-card">
-              <Sparkles size={18} />
-              <strong>AI playbook pass</strong>
-              <p>7 clause families extracted, 4 asks drafted, 3 approvals routed.</p>
+
+            <div className="sample-tabs" role="tablist" aria-label="Contract samples">
+              {contractSamples.map((sample, index) => (
+                <button className={selectedSample === index ? "active" : ""} type="button" key={sample.label} onClick={() => chooseSample(index)}>
+                  {sample.label}
+                </button>
+              ))}
             </div>
-          </div>
-        </div>
-      </section>
 
-      <section className="band" id="workflow">
-        <div className="section-head">
-          <p className="eyebrow">Before vs after</p>
-          <h2>Replace copy-paste legal triage with structured review.</h2>
-        </div>
-        <div className="comparison">
-          <div>
-            <h3>Manual workflow</h3>
-            <ol>
-              <li>Read full agreement and hunt for key terms.</li>
-              <li>Paste notes into email threads and spreadsheets.</li>
-              <li>Ask legal, finance, and security the same questions again.</li>
-              <li>Lose renewal and approval context after signature.</li>
-            </ol>
-          </div>
-          <div>
-            <h3>ClausePilot workflow</h3>
-            <ol>
-              <li>Extract clauses into a strict risk schema.</li>
-              <li>Compare terms to your playbook thresholds.</li>
-              <li>Route approvals with suggested negotiation asks.</li>
-              <li>Store audit events and renewal reminders automatically.</li>
-            </ol>
-          </div>
-        </div>
-      </section>
-
-      <section className="band compact">
-        <div className="roi">
-          <div>
-            <p className="eyebrow">ROI calculator</p>
-            <h2>${roi.net.toLocaleString(undefined, { maximumFractionDigits: 0 })} estimated monthly net value</h2>
-            <p>
-              Based on {monthlyContracts} contracts/month, {minutesPerReview} minutes per manual review,
-              and ${hourlyCost}/hour loaded reviewer cost.
-            </p>
-          </div>
-          <div className="sliders">
-            <label>
-              Contracts/month
-              <input type="range" min="10" max="300" value={monthlyContracts} onChange={(event) => setMonthlyContracts(Number(event.target.value))} />
-            </label>
-            <label>
-              Minutes/review
-              <input type="range" min="20" max="180" value={minutesPerReview} onChange={(event) => setMinutesPerReview(Number(event.target.value))} />
-            </label>
-            <label>
-              Loaded hourly cost
-              <input type="range" min="60" max="260" value={hourlyCost} onChange={(event) => setHourlyCost(Number(event.target.value))} />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section className="dashboard" id="dashboard">
-        <div className="section-head">
-          <p className="eyebrow">Live automation dashboard</p>
-          <h2>Review intake, playbook checks, routing, and usage in one surface.</h2>
-        </div>
-
-        <div className="dashboard-grid">
-          <form className="panel intake" onSubmit={(event) => { event.preventDefault(); void runReview(); }}>
-            <div className="panel-title">
-              <UploadCloud size={20} />
-              <h3>Contract intake</h3>
-            </div>
             <div className="field-row">
               <label>
                 Contract name
@@ -291,17 +270,104 @@ function App() {
               Contract text
               <textarea value={contractText} onChange={(event) => setContractText(event.target.value)} />
             </label>
-            <div className="field-row">
-              <label>
-                Deal value
-                <input type="number" value={dealValue} onChange={(event) => setDealValue(Number(event.target.value))} />
-              </label>
+            <label>
+              Deal value
+              <input type="number" value={dealValue} onChange={(event) => setDealValue(Number(event.target.value))} />
+            </label>
+            {error ? <p className="error-line">{error}</p> : null}
+            <button className="primary-action wide" disabled={loading}>
+              {loading ? "Reviewing agreement" : "Extract clauses and route"}
+            </button>
+          </form>
+
+          <section className="panel risk-panel" id="risk">
+            <div className="panel-header">
+              <div>
+                <p>Risk report</p>
+                <h2>{active ? statusLabels[active.reviewStatus] : "Awaiting review"}</h2>
+              </div>
+              <Gauge size={20} aria-hidden="true" />
+            </div>
+
+            {active ? (
+              <div className="risk-output">
+                <div className={`risk-score ${active.reviewStatus}`}>
+                  <strong>{active.riskScore}</strong>
+                  <span>{Math.round(active.confidence * 100)}% confidence</span>
+                </div>
+                <p className="summary">{active.summary}</p>
+                <div className="facts-grid">
+                  <Fact label="High risk" value={String(highCount)} />
+                  <Fact label="Medium risk" value={String(mediumCount)} />
+                  <Fact label="Credits" value={String(active.metrics.creditsUsed)} />
+                  <Fact label="Tokens est." value={active.metrics.tokensEstimated.toLocaleString()} />
+                </div>
+                <div className="finding-list">
+                  {active.clauseMap.slice(0, 6).map((finding) => (
+                    <article className={`finding ${finding.risk}`} key={finding.label}>
+                      <div>
+                        <strong>{finding.label}</strong>
+                        <span>{finding.playbookStatus.replace("_", " ")}</span>
+                      </div>
+                      <p>{finding.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <FileSearch size={34} aria-hidden="true" />
+                <p>Run a contract to see clause extraction, risk score, suggested asks, and approval routing.</p>
+              </div>
+            )}
+          </section>
+        </section>
+
+        <section className="two-column">
+          <section className="panel" id="routing">
+            <div className="panel-header">
+              <div>
+                <p>Approval route</p>
+                <h2>Who needs to review next</h2>
+              </div>
+              <Route size={20} aria-hidden="true" />
+            </div>
+            <div className="route-list">
+              {(active?.approvalRoute ?? defaultRoute).map((route, index) => (
+                <div className="route-row" key={route}>
+                  <span>{index + 1}</span>
+                  <strong>{route}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="ask-list">
+              <h3>Negotiation asks</h3>
+              {(active?.suggestedAsks ?? [
+                "Limit aggregate liability to 12 months of fees.",
+                "Attach the current data processing addendum.",
+                "Require 45 days notice before renewal."
+              ]).slice(0, 4).map((ask) => (
+                <p key={ask}>
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  {ask}
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel" id="playbook">
+            <div className="panel-header">
+              <div>
+                <p>Playbook controls</p>
+                <h2>Policy thresholds</h2>
+              </div>
+              <BookOpenCheck size={20} aria-hidden="true" />
+            </div>
+            <div className="calculator-grid">
               <label>
                 Liability cap max months
                 <input type="number" value={liabilityCapMaxMonths} onChange={(event) => setLiabilityCapMaxMonths(Number(event.target.value))} />
               </label>
-            </div>
-            <div className="field-row">
               <label>
                 Renewal notice minimum
                 <input type="number" value={renewalNoticeDaysMin} onChange={(event) => setRenewalNoticeDaysMin(Number(event.target.value))} />
@@ -311,129 +377,139 @@ function App() {
                 <input type="number" value={maxPaymentTermDays} onChange={(event) => setMaxPaymentTermDays(Number(event.target.value))} />
               </label>
             </div>
-            {error ? <p className="error">{error}</p> : null}
-            <button className="primary wide" disabled={loading}>
-              {loading ? "Reviewing..." : "Run contract review"}
-            </button>
-          </form>
+            <div className="settings-list">
+              <p>
+                <span>Allowed law</span>
+                <strong>NY, DE, CA, Singapore</strong>
+              </p>
+              <p>
+                <span>Security review</span>
+                <strong>Required when personal data appears</strong>
+              </p>
+              <p>
+                <span>Fallback</span>
+                <strong>Route uncertain results to legal</strong>
+              </p>
+            </div>
+          </section>
+        </section>
 
-          <div className="panel score-panel">
-            <div className="panel-title">
-              <Gauge size={20} />
-              <h3>Risk report</h3>
+        <section className="two-column">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p>ROI model</p>
+                <h2>Review hours reclaimed</h2>
+              </div>
+              <Layers3 size={20} aria-hidden="true" />
             </div>
-            <div className="risk-meter" style={{ "--risk": `${activeResult?.riskScore ?? 64}%` } as React.CSSProperties}>
-              <strong>{activeResult?.riskScore ?? 64}</strong>
-              <span>{activeResult ? routeLabels[activeResult.reviewStatus] : "Demo ready"}</span>
+            <div className="calculator-grid">
+              <label>
+                Contracts/month
+                <input type="number" value={monthlyContracts} min={5} onChange={(event) => setMonthlyContracts(Number(event.target.value))} />
+              </label>
+              <label>
+                Minutes/review today
+                <input type="number" value={minutesPerReview} min={15} onChange={(event) => setMinutesPerReview(Number(event.target.value))} />
+              </label>
+              <label>
+                Reviewer hourly cost
+                <input type="number" value={hourlyCost} min={50} onChange={(event) => setHourlyCost(Number(event.target.value))} />
+              </label>
             </div>
-            <p className="summary">{activeResult?.summary ?? "Run the sample agreement to generate a structured risk report, approval route, and negotiation checklist."}</p>
-            <div className="mini-grid">
-              <Stat label="High risk" value={String(highRisk)} icon={AlertTriangle} />
-              <Stat label="Medium risk" value={String(mediumRisk)} icon={BarChart3} />
-              <Stat label="Confidence" value={`${Math.round((activeResult?.confidence ?? 0.82) * 100)}%`} icon={BadgeCheck} />
-              <Stat label="Credits" value={String(activeResult?.metrics.creditsUsed ?? 2)} icon={WalletCards} />
+            <div className="roi-result">
+              <strong>${roi.net.toLocaleString()}</strong>
+              <span>estimated monthly net value from {roi.hoursSaved} hours returned</span>
             </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Controls</p>
+                <h2>Operational guardrails</h2>
+              </div>
+              <LockKeyhole size={20} aria-hidden="true" />
+            </div>
+            <div className="rule-list">
+              {[
+                "Human approval is required for high-risk output",
+                "Provider fallback keeps a deterministic rules pass",
+                "No secrets are shipped to the browser",
+                "Webhook delivery is documented for async review results"
+              ].map((rule) => (
+                <p key={rule}>
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  {rule}
+                </p>
+              ))}
+            </div>
+          </section>
+        </section>
+
+        <section className="panel pricing-panel">
+          <div className="panel-header">
+            <div>
+              <p>Pricing</p>
+              <h2>Metered plans for contract volume</h2>
+            </div>
+            <WalletCards size={20} aria-hidden="true" />
           </div>
-
-          <div className="panel findings">
-            <div className="panel-title">
-              <FileSearch size={20} />
-              <h3>Clause map</h3>
-            </div>
-            {(activeResult?.clauseMap ?? []).slice(0, 7).map((finding) => (
-              <article className={`finding ${finding.risk}`} key={finding.label}>
-                <div>
-                  <strong>{finding.label}</strong>
-                  <span>{finding.playbookStatus.replace("_", " ")}</span>
-                </div>
-                <p>{finding.summary}</p>
+          <div className="pricing-grid">
+            {pricing.map((plan) => (
+              <article key={plan.name}>
+                <span>{plan.name}</span>
+                <strong>{plan.price}<small>/mo</small></strong>
+                <p>{plan.volume}</p>
+                <em>{plan.note}</em>
               </article>
             ))}
-            {!activeResult ? (
-              <div className="placeholder-list">
-                <span>Liability cap</span>
-                <span>Privacy and DPA</span>
-                <span>Renewal notice</span>
-                <span>Payment terms</span>
+          </div>
+        </section>
+
+        {history.length ? (
+          <section className="panel history-panel">
+            <div className="panel-header">
+              <div>
+                <p>Run history</p>
+                <h2>Recent reviews</h2>
               </div>
-            ) : null}
-          </div>
-
-          <div className="panel route">
-            <div className="panel-title">
-              <Route size={20} />
-              <h3>Approval route</h3>
+              <History size={20} aria-hidden="true" />
             </div>
-            <div className="route-list">
-              {(activeResult?.approvalRoute ?? ["Sales owner", "Legal counsel", "Finance leadership"]).map((routeItem) => (
-                <span key={routeItem}>{routeItem}</span>
+            <div className="history-list">
+              {history.map((item) => (
+                <button type="button" key={item.id} onClick={() => setResult(item)}>
+                  <span>{item.contractName}</span>
+                  <strong>{statusLabels[item.reviewStatus]}</strong>
+                  <em>{item.riskScore}</em>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
               ))}
             </div>
-            <h4>Negotiation asks</h4>
-            <ul>
-              {(activeResult?.suggestedAsks ?? [
-                "Limit liability to 12 months of fees.",
-                "Attach current DPA and breach notice language.",
-                "Move payment terms to Net 45 or faster."
-              ]).slice(0, 4).map((ask) => (
-                <li key={ask}>{ask}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="panel usage">
-            <div className="panel-title">
-              <Layers3 size={20} />
-              <h3>Usage and audit</h3>
-            </div>
-            <div className="usage-bars">
-              <div><span style={{ width: "64%" }} /> Reviews used</div>
-              <div><span style={{ width: "38%" }} /> Credit burn</div>
-              <div><span style={{ width: "82%" }} /> Time saved</div>
-            </div>
-            <div className="audit">
-              {(activeResult?.auditTrail ?? [
-                { step: "Text intake", detail: "Sample contract ready for review.", timestamp: new Date().toISOString() },
-                { step: "Playbook", detail: "Default company policy loaded.", timestamp: new Date().toISOString() },
-                { step: "Webhook", detail: "Routing webhook configured in demo mode.", timestamp: new Date().toISOString() }
-              ]).map((event) => (
-                <p key={`${event.step}-${event.timestamp}`}><strong>{event.step}</strong>{event.detail}</p>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel settings">
-            <div className="panel-title">
-              <LockKeyhole size={20} />
-              <h3>Controls</h3>
-            </div>
-            <div className="control-grid">
-              <span><CheckCircle2 size={16} /> Human approval for high risk</span>
-              <span><Webhook size={16} /> Webhook delivery ready</span>
-              <span><ShieldCheck size={16} /> No secrets in client code</span>
-              <span><Sparkles size={16} /> OpenAI, Anthropic, Gemini envs</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="band" id="pricing">
-        <div className="section-head">
-          <p className="eyebrow">Pricing</p>
-          <h2>Metered plans that preserve AI margin.</h2>
-        </div>
-        <div className="pricing">
-          {pricing.map((plan) => (
-            <article className={plan.best ? "price-card featured" : "price-card"} key={plan.name}>
-              <span>{plan.name}</span>
-              <strong>{plan.price}<small>/mo</small></strong>
-              <p>{plan.volume}</p>
-              <button>{plan.best ? "Start team trial" : "Choose plan"}</button>
-            </article>
-          ))}
-        </div>
+          </section>
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function Metric({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
+  return (
+    <article className="metric-card">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   );
 }
 
